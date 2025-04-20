@@ -87,7 +87,10 @@ class PerceptronModel(object):
             a node containing a single number (the score)
         """
         # TODO: Calculate the score using the weights and input
-        raise NotImplementedError()
+        # raise NotImplementedError()
+
+        return nn.DotProduct(x, self.w)
+
 
     def get_prediction(self, x):
         """
@@ -96,7 +99,10 @@ class PerceptronModel(object):
         Returns: 1 or -1
         """
         # TODO: Compute the predicted class using the forward method
-        raise NotImplementedError()
+        # raise NotImplementedError()
+        score = nn.as_scalar(self.forward(x))
+        return 1 if score >= 0 else -1
+
 
     def train(self, dataset, visualize=True):
         """
@@ -105,7 +111,21 @@ class PerceptronModel(object):
         batch_size = 1
         
         # TODO: Implement the training loop
-        raise NotImplementedError()
+        # raise NotImplementedError()
+        # keep sweeping until no mistakes
+        while True:
+            mistakes = 0
+            for x, y in dataset.iterate_once(batch_size):
+                pred   = self.get_prediction(x)
+                actual = nn.as_scalar(y)   # y is a Constant node containing ±1
+                if pred != actual:
+                    # update direction = y * x  (elementwise)
+                    direction = nn.Constant(x.data * actual)
+                    # perceptron update: w ← w + 1.0 * direction
+                    self.w.update(direction, 1.0)
+                    mistakes += 1
+            if mistakes == 0:
+                break
 
         val_accuracy = dataset.get_validation_accuracy(self)
         print("Final validation accuracy:", val_accuracy)
@@ -133,7 +153,14 @@ class NeuralNetworkAgent(Agent):
 
         # TODO: Initialize parameters (weights and biases) for each layer of the network
         # Example: self.params = {"w1": ..., "b1": ..., ...}
-        raise NotImplementedError()
+        # raise NotImplementedError()
+        hidden_size = 32
+        self.params = {
+            "W1": nn.Parameter(self.input_size,  hidden_size),
+            "b1": nn.Parameter(1,                 hidden_size),
+            "W2": nn.Parameter(hidden_size,       self.output_size),
+            "b2": nn.Parameter(1,                 self.output_size),
+        }
 
     def load_params(self, path):
         """
@@ -174,8 +201,15 @@ class NeuralNetworkAgent(Agent):
 
         # TODO: Implement the forward pass through the network
         # Example: Apply Linear transformation and activation functions, etc.
-        raise NotImplementedError()
-    
+        # raise NotImplementedError()
+        h = nn.Linear(x, self.params["W1"])
+        h = nn.AddBias(h, self.params["b1"])
+        h = nn.ReLU(h)
+
+        out = nn.Linear(h, self.params["W2"])
+        out = nn.AddBias(out, self.params["b2"])
+        return out  # shape (batch_size x 9)
+
     def get_loss(self, x, y):
         """
         Computes the loss for a batch of examples.
@@ -191,10 +225,12 @@ class NeuralNetworkAgent(Agent):
         predicted_scores = self.forward(x)
 
         # TODO: Compute the loss for classification problem
-        raise NotImplementedError()
-
+        # raise NotImplementedError()
+        logits = self.forward(x)
+        # y is one‑hot (batch_size x 9)
+        loss = nn.SoftmaxLoss(logits, y)
         return loss
-    
+   
     def train(self, dataset, batch_size=8, epochs=10, save_path=""):
         """
         Trains the model using the provided dataset.
@@ -225,7 +261,19 @@ class NeuralNetworkAgent(Agent):
                 loss = self.get_loss(x, y)
 
                 # TODO: Compute gradients and update the weights/biases
-                raise NotImplementedError()
+                # raise NotImplementedError()
+                grads = nn.gradients(
+                    loss,
+                    [self.params[k] for k in ("W1","b1","W2","b2")]
+                )
+                # gradient descent step on each parameter
+                for p, g in zip(
+                    [self.params[k] for k in ("W1","b1","W2","b2")],
+                    grads
+                ):
+                    p.update(g, -self.learning_rate)
+
+                iter += 1
 
                 val_accuracy = dataset.get_validation_accuracy(self)
                 iter += 1
@@ -265,11 +313,18 @@ class NeuralNetworkAgent(Agent):
         predictions = self.forward(nn.Constant(state_values)).data
 
         # TODO: Get the action with the highest logits score
-        raise NotImplementedError()
+        # raise NotImplementedError()
+
+        arr = np.array([state_values], dtype=float)          # shape (1 x 9)
+        scores = self.forward(nn.Constant(arr)).data  # get raw logits
+
+        # pick the cell with highest score
+        idx = int(np.argmax(scores.flatten()))
+        x, y = divmod(idx, self.cols)
 
         # Convert the action index back to an Action object
-        x = action_index // self.cols
-        y = action_index % self.cols
+        # x = action_index // self.cols
+        # y = action_index % self.cols
         return Action(ActionType.REVEAL, x, y)
 
     def play(self, reveal_clue=False):
