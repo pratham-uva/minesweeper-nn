@@ -308,23 +308,23 @@ class NeuralNetworkAgent(Agent):
             cell.value if hasattr(cell, 'value') else cell
             for row in state for cell in row
         ]
-        # Get the predicted action
-        state_values = np.array([state_values], dtype=float)
-        predictions = self.forward(nn.Constant(state_values)).data
+        # 1) flatten the board into 9 numbers
+        flat = []
+        for row in state:
+            for cell in row:
+                # cell.value if it’s a Cell object, else assume it’s already a number
+                flat.append(cell.value if hasattr(cell, "value") else cell)
 
-        # TODO: Get the action with the highest logits score
-        # raise NotImplementedError()
+        # 2) make a (1 x 9) numpy array, NOT (1 x 3 x 3)
+        arr = np.array(flat, dtype=float).reshape(1, -1)
 
-        arr = np.array([state_values], dtype=float)          # shape (1 x 9)
-        scores = self.forward(nn.Constant(arr)).data  # get raw logits
+        # 3) run it through your network
+        logits = self.forward(nn.Constant(arr)).data   # shape is now (1,9)
 
-        # pick the cell with highest score
-        idx = int(np.argmax(scores.flatten()))
+        # 4) pick the highest‑scoring index
+        idx = int(np.argmax(logits.flatten()))
         x, y = divmod(idx, self.cols)
 
-        # Convert the action index back to an Action object
-        # x = action_index // self.cols
-        # y = action_index % self.cols
         return Action(ActionType.REVEAL, x, y)
 
     def play(self, reveal_clue=False):
